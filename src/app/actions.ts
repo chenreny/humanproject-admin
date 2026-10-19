@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import { normalizeMemeImage } from "@/lib/meme-image";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { MEDIA_TEMPLATES } from "@/lib/media-templates";
 
 const TOPICS = ["Campus", "Ktown", "EastVillage", "NYC", "Dorm life"];
 const SYSTEM_PROMPT = "Create an original image meme for a Columbia College student exploring NYC. Use a visible detail, expression, or contrast as the joke. Write short, punchy classic meme text: setup 1–80 characters and punchline 1–100 characters. Do not describe the image in the joke. Make it relatable to campus, dorms, student budgets, or NYC. Provide image_description as literal alt text (1–300 characters), without identifying people or inferring sensitive traits. Avoid slurs, harassment, sexual content, and personal attacks. Return JSON with setup, punchline, and image_description only.";
@@ -22,9 +25,31 @@ export async function createMedia(form: FormData) {
   const { user } = await requireAdmin();
   const prompt = text(form.get("prompt"), 500);
   const topic = text(form.get("topic"), 30);
+  const source = text(form.get("image_source"), 20);
+  const templateId = text(form.get("template_id"), 80);
+  const template = MEDIA_TEMPLATES.find((item) => item.id === templateId);
+  const uploaded = form.get("image");
   if (prompt.length < 10 || !TOPICS.includes(topic)) redirect("/media/new?error=Check%20the%20scene%20and%20topic");
+  if (source === "template" && (!template || !(uploaded instanceof File ? uploaded.size === 0 : true))) redirect("/media/new?error=Choose%20a%20template%20from%20the%20gallery");
+  if (source === "upload" && (!(uploaded instanceof File) || !uploaded.size || templateId)) redirect("/media/new?error=Choose%20one%20uploaded%20image");
+  if (source === "generated" && (templateId || (uploaded instanceof File && uploaded.size > 0))) redirect("/media/new?error=Choose%20only%20one%20picture%20source");
+  if (!["template", "upload", "generated"].includes(source)) redirect("/media/new?error=Choose%20a%20picture%20source");
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) redirect("/media/new?error=OPENAI_API_KEY%20is%20not%20configured");
+  let imageBytes: Buffer | undefined;
+  if (source !== "generated") {
+    try {
+      let imageFile: File;
+      if (source === "template" && template) {
+        const bytes = await readFile(path.join(process.cwd(), "public", template.file));
+        imageFile = new File([new Uint8Array(bytes)], template.file.split("/").pop() ?? "template.jpg", { type: template.file.endsWith(".webp") ? "image/webp" : "image/jpeg" });
+      } else if (uploaded instanceof File) imageFile = uploaded;
+      else throw new Error("Choose a photo.");
+      imageBytes = await normalizeMemeImage(imageFile);
+    } catch (error) {
+      redirect(`/media/new?error=${encodeURIComponent(error instanceof Error ? error.message : "That image could not be opened")}`);
+    }
+  }
   const db = createServiceClient();
   const model = process.env.OPENAI_MODEL || "gpt-6-luna";
   const { data: request, error: insertError } = await db.from("generation_requests").insert({ user_id: user.id, prompt, system_prompt: SYSTEM_PROMPT, topic, model, status: "pending" }).select("id").single();
@@ -32,6 +57,7 @@ export async function createMedia(form: FormData) {
   const imagePath = `${user.id}/${request.id}.jpg`;
   let stored = false;
   try {
+    if (source === "generated") {
     const imageResponse = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` }, cache: "no-store", signal: AbortSignal.timeout(25_000),
       body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare", prompt: `Create an original natural-looking 3:2 photograph for a funny student meme about ${topic}. Scene: ${prompt}. Make the visual moment clear and expressive. Do not include text, captions, lettering, watermarks, logos, or recognizable copyrighted characters.`, size: "1536x1024", quality: "low", output_format: "jpeg", output_compression: 60 }),
@@ -41,11 +67,13 @@ export async function createMedia(form: FormData) {
     const encoded = imagePayload.data?.[0]?.b64_json;
     if (typeof encoded !== "string") throw new Error("Image generation returned no image.");
     const generatedBytes = Buffer.from(encoded, "base64");
-    const imageBytes = await normalizeMemeImage(new File([new Uint8Array(generatedBytes)], "generated.jpg", { type: "image/jpeg" }));
+    imageBytes = await normalizeMemeImage(new File([new Uint8Array(generatedBytes)], "generated.jpg", { type: "image/jpeg" }));
+    }
+    if (!imageBytes) throw new Error("Image unavailable.");
     const { error: uploadError } = await db.storage.from("meme-images").upload(imagePath, imageBytes, { contentType: "image/jpeg", upsert: false });
     if (uploadError) throw new Error("Image upload failed.");
     stored = true;
-    const { error: updateError } = await db.from("generation_requests").update({ image_path: imagePath }).eq("id", request.id);
+    const { error: updateError } = await db.from("generation_requests").update({ image_path: imagePath, template_id: template?.id ?? null }).eq("id", request.id);
     if (updateError) throw new Error("Image reference could not be saved.");
     const captionResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` }, cache: "no-store", signal: AbortSignal.timeout(30_000),
@@ -59,8 +87,8 @@ export async function createMedia(form: FormData) {
     const { error: publishError } = await db.rpc("complete_meme_generation", { p_request_id: request.id, p_setup: caption.setup, p_punchline: caption.punchline, p_image_description: caption.description });
     if (publishError) throw new Error("Caption could not be published.");
   } catch (error) {
-    await db.from("generation_requests").update({ status: "failed" }).eq("id", request.id).eq("status", "pending");
-    if (stored) await db.storage.from("meme-images").remove([imagePath]);
+    const { data: failed } = await db.from("generation_requests").update({ status: "failed" }).eq("id", request.id).eq("status", "pending").select("id");
+    if (stored && failed?.length) await db.storage.from("meme-images").remove([imagePath]);
     redirect(`/media/new?error=${encodeURIComponent(error instanceof Error ? error.message : "Generation failed")}`);
   }
   revalidatePath("/media"); revalidatePath("/");

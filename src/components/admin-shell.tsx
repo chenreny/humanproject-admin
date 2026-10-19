@@ -16,7 +16,7 @@ export function AdminShell({ children, context, active }: { children: ReactNode;
       <Link className="brand" href="/"><span className="brand-mark">h.</span><span><b>humor project</b><small>CONTROL ROOM</small></span></Link>
       <div className="workspace-label">WORKSPACE</div>
       <nav className="nav-list" aria-label="Admin navigation">{nav.map((item) => <Link key={item.href} className={`nav-link ${active === item.href ? "active" : ""}`} href={item.href}><span className="nav-icon">{item.icon}</span>{item.label}{active === item.href && <i />}</Link>)}</nav>
-      <div className="sidebar-bottom"><div className="live-pill"><span />Production systems operational</div><div className="user-chip"><span className="avatar">{display.slice(0, 1).toUpperCase()}</span><span className="user-meta"><b>{display}</b><small>SUPER ADMIN</small></span><form action="/auth/logout" method="post"><button className="logout" aria-label="Sign out" title="Sign out">↪</button></form></div></div>
+      <div className="sidebar-bottom"><div className="user-chip"><span className="avatar">{display.slice(0, 1).toUpperCase()}</span><span className="user-meta"><b>{display}</b><small>SUPER ADMIN</small></span><form action="/auth/logout" method="post"><button className="logout" aria-label="Sign out" title="Sign out">↪</button></form></div></div>
     </aside>
     <main className="main-area"><header className="topbar"><div className="breadcrumb">The Humor Project <span>/</span> <b>{nav.find((item) => item.href === active)?.label}</b></div><div className="top-actions"><span className="environment"><i /> LIVE</span><span className="top-date">ADMIN CONSOLE</span></div></header>{children}</main>
   </div>;

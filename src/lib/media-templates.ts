@@ -1,0 +1,15 @@
+export const MEDIA_TEMPLATES = [
+  { id: "surprised-pikachu", name: "Surprised Pikachu", file: "meme-templates/surprised-pikachu.jpg", category: "Reactions" },
+  { id: "this-is-fine", name: "This Is Fine", file: "meme-templates/this-is-fine.jpg", category: "Chaos" },
+  { id: "monkey-puppet", name: "Monkey Puppet", file: "meme-templates/monkey-puppet.jpg", category: "Reactions" },
+  { id: "disaster-girl", name: "Disaster Girl", file: "meme-templates/disaster-girl.jpg", category: "Chaos" },
+  { id: "waiting-skeleton", name: "Waiting Skeleton", file: "meme-templates/waiting-skeleton.jpg", category: "Waiting" },
+  { id: "hide-the-pain-harold", name: "Hide the Pain Harold", file: "meme-templates/hide-the-pain-harold.jpg", category: "Reactions" },
+  { id: "woman-yelling-at-cat", name: "Woman Yelling at Cat", file: "meme-templates/woman-yelling-at-cat.jpg", category: "Chaos" },
+  { id: "one-does-not-simply", name: "One Does Not Simply", file: "meme-templates/one-does-not-simply.jpg", category: "Reactions" },
+  { id: "animal-library-cat", name: "Late-night library cat", file: "room/animals/library-cat.webp", category: "Animal photos" },
+  { id: "animal-campus-raccoon", name: "Campus side-quest raccoon", file: "room/animals/campus-raccoon.webp", category: "Animal photos" },
+  { id: "animal-nyc-dog", name: "Subway pizza dog", file: "room/animals/subway-dog.webp", category: "Animal photos" },
+  { id: "animal-dorm-cat", name: "Dorm blanket cat", file: "room/animals/dorm-cat.webp", category: "Animal photos" },
+  { id: "animal-dining-cat", name: "Dining hall pancake cat", file: "room/animals/dining-cat.webp", category: "Animal photos" },
+] as const;
